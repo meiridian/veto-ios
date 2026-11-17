@@ -82,7 +82,7 @@ public final class VetoClassifier: Sendable {
     }
 }
 
-public enum MLComputeUnitsOption: Sendable { case all, cpuOnly, cpuAndNeuralEngine }
+public enum MLComputeUnitsOption: String, CaseIterable, Sendable { case all, cpuOnly, cpuAndNeuralEngine }
 
 private extension Duration {
     var milliseconds: Double {

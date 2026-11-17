@@ -3,11 +3,27 @@
 Measured 2026-10-30 with Veto model v1 (MiniLM encoder + logistic regression, FP16 Core ML, input length fixed at
 256 tokens). Xcode 26.3, simulator runtime iOS 26.3.
 
-**Bottom line:** the only real-device numbers so far come from one iPhone 14, in the app, from a single Debug-build
-run. Nothing has been measured **inside the Message Filter Extension**, which is the number that decides whether the
-filter is viable. Simulator numbers below describe the development Mac, not any iPhone.
+**Bottom line:** the only real-device latency numbers come from one iPhone 14, in the app, from a single Debug-build
+run of the original 43 MB FP16 model. The decisive finding is about **memory inside the Message Filter Extension**
+(section 1): that model exceeded the extension's 24 MB limit and was killed. A compressed ~11 MB export was imported
+afterward; its fit and extension latency are not yet confirmed on a device. Simulator numbers describe the
+development Mac, not any iPhone, and were measured with the FP16 model except where noted.
 
-## 1. Real device: iPhone 14, in the app
+## 1. Real device: the extension memory limit
+
+Observed on an iPhone 14 (iOS 27.0.1) in Console.app while a text arrived, with the 43 MB FP16 model:
+
+```
+memorystatus: VetoMessageFilter exceeded mem limit: ActiveHard 24 MB (fatal)
+Process VetoMessageFilter killed by jetsam reason per-process-limit
+```
+
+The extension died about 0.3 s after starting (while mapping the model), returned no answer, and the message stayed in
+Unknown Senders (fail-open). The model has to be compressed. The Veto export now offers 4-bit palettization (about
+11 MB; the export's Mac measurement showed about 5 MB peak footprint growth with CPU-only compute, which is a proxy,
+not an iPhone result). Re-measuring on the device is the next step.
+
+## 1b. Real device: iPhone 14, in the app (FP16 model)
 
 Read from the app's Test and About screens on one iPhone 14 (iOS 27.0.1), Debug build run from Xcode, one
 classification after a cold launch.
@@ -67,12 +83,13 @@ How to read this:
 |---|---|
 | Warm latency on a real iPhone | The first-call figure is mostly one-time setup. |
 | Release build on a real iPhone | Debug builds are not representative. |
-| Latency and model load inside the Message Filter Extension | iOS limits extension time and memory. A slow or memory-hungry extension can be killed, and then messages pass through unfiltered. |
-| Peak memory in the extension | The model is about 43 MB on disk; the loaded footprint is unknown. |
+| Latency and model load inside the Message Filter Extension | iOS limits extension time as well as memory. A slow extension can be killed, and then messages pass through unfiltered. |
+| Peak memory of the compressed model in the extension | The FP16 model was killed at 24 MB. The ~11 MB model's footprint on a device is not yet confirmed. |
+| Latency of the compressed model | Section 3's simulator numbers are for FP16; 4-bit weights can change speed. |
 | Other iPhones | Only an iPhone 14 has been tried. Older devices without a fast Neural Engine may be much slower. |
 
-If extension timing turns out to be too slow or too large, improvements (weight quantization, a smaller encoder) belong
-in the `veto` export pipeline, not in this repository.
+If the compressed model still doesn't fit or is too slow, further reductions (more aggressive compression, a pruned
+vocabulary, a smaller encoder) belong in the `veto` export pipeline, not in this repository.
 
 ## 5. Reproduce
 
@@ -90,4 +107,5 @@ Look for the `VETO_LATENCY` line in the output. For a Release configuration add
 
 Real device: run the app from Xcode on your iPhone, classify a message, and read the timings on the Test tab; model load
 and first-classification times are on the About tab. Use Instruments (Time Profiler, Allocations) attached to the
-`VetoMessageFilter` process for extension measurements ([device-testing.md](device-testing.md)).
+`VetoMessageFilter` process for extension measurements, or watch Console.app filtered by `veto` for the extension's
+decision lines and any `exceeded mem limit` kill ([device-testing.md](device-testing.md)).

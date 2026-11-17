@@ -1,7 +1,9 @@
 import SwiftUI
+import VetoCore
 
 struct AboutView: View {
     @Environment(ClassifierEngine.self) private var engine
+    @State private var selectedUnits = ClassifierEngine.storedComputeUnits
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -32,7 +34,15 @@ struct AboutView: View {
                     if let first = engine.firstInferenceMilliseconds {
                         LabeledContent("First classification", value: String(format: "%.1f ms", first))
                     }
-                    Text("Measurements stay on this device.").font(.footnote).foregroundStyle(.secondary)
+                    if let mb = engine.footprintBeforeLoadMB { LabeledContent("Memory before load", value: String(format: "%.1f MB", mb)) }
+                    if let mb = engine.footprintAfterLoadMB { LabeledContent("Memory after load", value: String(format: "%.1f MB", mb)) }
+                    if let mb = engine.footprintAfterFirstClassifyMB { LabeledContent("Memory after classify", value: String(format: "%.1f MB", mb)) }
+                    Picker("Compute units", selection: $selectedUnits) {
+                        ForEach(MLComputeUnitsOption.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .onChange(of: selectedUnits) { _, new in ClassifierEngine.storeComputeUnits(new) }
+                    Text("Running now with \(engine.computeUnits.rawValue). Changing compute units applies after you force-quit and reopen the app. iOS ends the filter extension above 24 MB. Measurements stay on this device.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Enable the filter") {
                     Text("Settings › Messages › Unknown & Spam › Text Message Filter › Veto. Then turn on Filter Unknown Senders if you want filtering applied.")
