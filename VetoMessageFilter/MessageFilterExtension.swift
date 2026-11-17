@@ -9,6 +9,9 @@ final class MessageFilterExtension: ILMessageFilterExtension {
     /// Loaded once per extension process. `nil` (load failure) means every message is allowed.
     /// Logs the error type only, never message content.
     private static let classifier: VetoClassifier? = {
+        let sampler = FootprintSampler(log: log)
+        sampler.start()
+        defer { sampler.stop() }
         do { return try VetoClassifier.load(computeUnits: .cpuOnly) }
         catch {
             log.error("model load failed; allowing all messages: \(String(describing: type(of: error)), privacy: .public)")
@@ -28,7 +31,7 @@ extension MessageFilterExtension: ILMessageFilterQueryHandling {
             response.action = .junk
         }
         // Outcome only: no text, sender or probability.
-        Self.log.info("handled a message: action=\(response.action == .junk ? "junk" : "none", privacy: .public)")
+        Self.log.notice("handled a message: action=\(response.action == .junk ? "junk" : "none", privacy: .public)")
         completion(response)
     }
 }
