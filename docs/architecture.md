@@ -17,4 +17,4 @@ Swift 6 language mode; tests pass without concurrency warnings from our code.
 - **Fail open:** `VetoClassifier.shouldFilter` returns `false` on any error; the extension returns `.none` when the model
   cannot load or the body is empty, and `.junk` only on a successful above-threshold prediction.
 - **Extension action:** IdentityLookup offers `.none/.allow/.junk/.promotion/.transaction` (checked in the iOS 26.2 SDK
-  headers). Political solicitation maps to `.junk`. The extension uses `.cpuOnly` compute units for predictability (unmeasured choice).
+  headers). Political solicitation maps to `.junk`. The extension uses `.cpuOnly` compute units for predictability (an unmeasured choice). The extension is killed above 24 MB of memory, which is why the model must be a compressed export (see [latency-report.md](latency-report.md)).

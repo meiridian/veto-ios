@@ -80,7 +80,7 @@ allow    filter (Spam)
 | `VetoCore` | Shared framework: tokenizer, metadata parser, Core ML adapter and decision logic. One source of truth for the app and the extension. |
 | `Veto` | SwiftUI test app: classify text, see probability and threshold, model and app versions, load timings. |
 | `VetoMessageFilter` | `ILMessageFilterExtension` that classifies messages iOS hands it. |
-| `VetoTests` | Tokenizer parity, metadata, threshold, fail-open and (with a local model) Python↔Core ML parity tests. |
+| `VetoTests` | Tokenizer parity, metadata, threshold, fail-open and (with a local model) Swift↔Core ML parity tests. |
 
 Two properties are non-negotiable:
 
@@ -131,12 +131,13 @@ xcodebuild test -project Veto.xcodeproj -scheme Veto \
 
 - **CI** runs the safety scan (no private data, secrets or network code anywhere in history) and the model-free tests; see [CONTRIBUTING.md](CONTRIBUTING.md#automated-checks).
 - **Always run:** tokenizer, golden parity (70 fixtures), edge-case parity (31), metadata, threshold and fail-open tests.
-- **Need your model (skipped otherwise):** Core ML load, Python↔Core ML parity and latency. For parity, generate the
+- **Need your model (skipped otherwise):** Core ML load, Swift↔Core ML parity and latency. For parity, generate the
   reference once from the `veto` environment:
   ```bash
   uv run --project /path/to/veto python scripts/make-python-reference.py /path/to/veto .
   ```
-  This writes the gitignored `ModelArtifacts/python_reference.json` using Veto's real Python inference.
+  This writes the gitignored `ModelArtifacts/python_reference.json` by running your deployed Core ML package through
+  coremltools, so the tests check the Swift runtime against exactly the model you ship.
 
 ## Tokenizer parity
 
@@ -148,14 +149,17 @@ the authority, and new edge cases should come from the reference tokenizer, neve
 ## Known limitations
 
 - **Unverified end to end.** Filtering of real incoming messages by the extension on a device is still being confirmed.
-- **Extension performance is unmeasured.** In the app on one iPhone (Debug build) model load took about 1.5 s and the
-  first classification about 0.8 s. iOS limits extension memory and run time, so Release-build measurements inside the
-  extension are still needed ([device testing](docs/device-testing.md)).
+- **The extension has a 24 MB memory limit.** On an iPhone 14 the original 43 MB FP16 model was killed by iOS
+  (jetsam) inside the extension, so no message was filtered (it failed open, as designed). Use a compressed export of
+  about 11 MB or less; whether it fits is being confirmed on a device. Extension latency is still unmeasured
+  ([latency report](docs/latency-report.md)).
+- **Compression changes scores.** A 4-bit export shifts probabilities slightly, so its threshold differs from the FP16
+  one and some borderline messages decide differently. The export's quality report lists the trade-offs.
 - **Spam only.** iOS offers fixed categories; Veto uses Spam. There's no custom "Political" folder, and iOS only
   invokes filters for unknown senders. Messages that arrived before you enabled the filter aren't re-sorted.
-- **Model size.** About 43 MB, embedded once in `VetoCore.framework` and shared by the app and the extension.
-- **Threshold edge case.** The exported threshold sits exactly at one validation score (noted in the Veto docs), and
-  FP16 inference can flip that one case.
+- **Model size.** About 11 MB (4-bit), embedded once in `VetoCore.framework` and shared by the app and the extension.
+- **Threshold edge cases.** Messages scoring within about 0.01 of the threshold can land on either side, so parity
+  tests treat those as boundary cases.
 - **Build from source only.** See [docs/distribution.md](docs/distribution.md).
 
 ## Documentation

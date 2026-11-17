@@ -14,15 +14,33 @@ final class ClassifierEngine {
     private(set) var lastTimings: VetoTimings?
     private(set) var firstInferenceMilliseconds: Double?
     private(set) var errorMessage: String?
+    /// Process footprint in MB (the figure iOS enforces extension limits on), measured in this app.
+    private(set) var footprintBeforeLoadMB: Double?
+    private(set) var footprintAfterLoadMB: Double?
+    private(set) var footprintAfterFirstClassifyMB: Double?
+    private(set) var computeUnits: MLComputeUnitsOption = ClassifierEngine.storedComputeUnits
     private var classifier: VetoClassifier?
+
+    static let computeUnitsKey = "veto.debug.computeUnits"
+    static var storedComputeUnits: MLComputeUnitsOption {
+        UserDefaults.standard.string(forKey: computeUnitsKey).flatMap(MLComputeUnitsOption.init(rawValue:)) ?? .all
+    }
+
+    /// Takes effect on the next launch, so each measurement starts from a fresh process.
+    static func storeComputeUnits(_ option: MLComputeUnitsOption) {
+        UserDefaults.standard.set(option.rawValue, forKey: computeUnitsKey)
+    }
 
     func loadIfNeeded() async {
         guard case .idle = state else { return }
         state = .loading
         let clock = ContinuousClock()
         let start = clock.now
+        footprintBeforeLoadMB = MemoryFootprint.currentMegabytes()
+        let units = computeUnits
         do {
-            let loaded = try await Task.detached(priority: .userInitiated) { try VetoClassifier.load() }.value
+            let loaded = try await Task.detached(priority: .userInitiated) { try VetoClassifier.load(computeUnits: units) }.value
+            footprintAfterLoadMB = MemoryFootprint.currentMegabytes()
             let elapsed = clock.now - start
             loadMilliseconds = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
             classifier = loaded
@@ -38,7 +56,10 @@ final class ClassifierEngine {
         errorMessage = nil
         do {
             let (prediction, timings) = try await classifier.classifyTimed(text: text)
-            if firstInferenceMilliseconds == nil { firstInferenceMilliseconds = timings.totalMilliseconds }
+            if firstInferenceMilliseconds == nil {
+                firstInferenceMilliseconds = timings.totalMilliseconds
+                footprintAfterFirstClassifyMB = MemoryFootprint.currentMegabytes()
+            }
             lastPrediction = prediction
             lastTimings = timings
         } catch {

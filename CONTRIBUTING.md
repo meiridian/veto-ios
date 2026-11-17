@@ -39,7 +39,7 @@ Every pull request, and every push to `main`, runs two jobs in GitHub Actions
   commit does not hide it, because history is scanned. The script prints paths and line numbers, never contents.
 - **Build and test** (`xcodebuild test` on the iOS Simulator): builds the app and extension and runs the tests that
   don't need a private model. The model tests (`ModelParityTests`) are excluded from CI because every user's model is
-  private, so Core ML parity with Python is only verified locally. Run them before changing the tokenizer or the
+  private, so Swift↔Core ML parity is only verified locally. Run them before changing the tokenizer or the
   model adapter.
 
 Run the same checks locally before you push:

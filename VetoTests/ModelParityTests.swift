@@ -2,7 +2,8 @@ import XCTest
 @testable import VetoCore
 
 /// Local integration tests: need the private model (`scripts/import-veto-model.sh`) and the
-/// Python reference (`scripts/make-python-reference.py`). Skipped when absent.
+/// reference predictions (`scripts/make-python-reference.py`), which come from the deployed Core ML
+/// package run through coremltools. They verify the Swift runtime, not compression error. Skipped when absent.
 final class ModelParityTests: XCTestCase {
     struct Reference: Decodable { let text: String; let probability: Double; let should_filter: Bool; let category: String }
     struct ReferenceFile: Decodable { let threshold: Double; let examples: [Reference] }
@@ -30,16 +31,18 @@ final class ModelParityTests: XCTestCase {
         }
         let reference = try JSONDecoder().decode(ReferenceFile.self, from: Data(contentsOf: url))
         XCTAssertEqual(classifier.metadata.threshold, reference.threshold, accuracy: 1e-12)
-        var maxDiff = 0.0, disagreements: [String] = []
+        let tolerance = 0.01
+        var maxDiff = 0.0, disagreements: [String] = [], boundary = 0
         for (i, example) in reference.examples.enumerated() {
             let (prediction, _) = try classifier.classifySync(example.text)
             maxDiff = max(maxDiff, abs(prediction.probability - example.probability))
-            if prediction.isPoliticalSolicitation != example.should_filter {
-                disagreements.append("#\(i) \(example.category): swift \(prediction.probability) python \(example.probability)")
-            }
+            guard prediction.isPoliticalSolicitation != example.should_filter else { continue }
+            // A score within tolerance of the threshold can legitimately land on either side.
+            if abs(example.probability - reference.threshold) <= tolerance { boundary += 1; continue }
+            disagreements.append("#\(i) \(example.category): swift \(prediction.probability) reference \(example.probability)")
         }
-        print("VETO_PARITY examples=\(reference.examples.count) maxAbsDiff=\(maxDiff) disagreements=\(disagreements.count)")
-        XCTAssertLessThanOrEqual(maxDiff, 0.01, "FP16 tolerance from export contract")
+        print("VETO_PARITY examples=\(reference.examples.count) maxAbsDiff=\(maxDiff) disagreements=\(disagreements.count) boundaryFlips=\(boundary)")
+        XCTAssertLessThanOrEqual(maxDiff, tolerance, "Swift vs coremltools on the same Core ML package")
         XCTAssertTrue(disagreements.isEmpty, "decision disagreements: \(disagreements)")
     }
 

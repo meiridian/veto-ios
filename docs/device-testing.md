@@ -11,6 +11,8 @@
 5. **Measure** (not yet done): Instruments (Time Profiler, Allocations) attached to the `VetoMessageFilter` process, model load and
    first-inference time from the About tab (app only), and watch for extension termination (jetsam) in Console.
    If load time or memory is unsafe, stop and take it to Veto's export (quantization / smaller encoder), not here.
+   The extension is killed above 24 MB (seen on an iPhone 14 with the 43 MB FP16 model). In Console.app, filter by `veto`:
+   `action=junk` / `action=none` lines show each decision; `exceeded mem limit` or `killed by jetsam` means the model is too big.
 
 ## Synthetic matrix
 Positive: campaign ad ("Dana Whitfield for Governor … early voting starts Oct. 19"), donation request, GOTV, candidate update,
